@@ -1,0 +1,7 @@
+{
+  "editor.fontFamily": "'JetBrains Mono', monospace",
+  "editor.fontSize": 15,
+  "terminal.integrated.fontFamily": "'JetBrains Mono', monospace",
+  "terminal.integrated.fontSize": 15,
+  "window.zoomLevel": 0.3
+}
