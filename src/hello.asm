@@ -31,6 +31,11 @@
 ; ==========================================
 ; CÓDIGO
 ; ==========================================
+    .segment "ZEROPAGE"
+FadeLevel:      .res 1
+FadeCounter:    .res 1
+SteamCounter:   .res 1
+
     .segment "CODE"
 
 ; ------------------------------------------
@@ -41,13 +46,18 @@ NAME_LEN_TILES   = 12
 NAME_TILE_X      = ((SCREEN_TILE_W - NAME_LEN_TILES) / 2) ; coluna em tiles (BG1)
 NAME_TILE_Y      = 10          ; linha  em tiles (BG1)
 BG1_MAP_WORD     = $0400       ; VRAM word addr ($0800 bytes): tilemap BG1 fora da área OBJ
+NAME_BG_WORD     = (BG1_MAP_WORD + NAME_TILE_Y*32 + NAME_TILE_X)
 
 NAME_PIX_X       = (NAME_TILE_X * 8)
 NAME_PIX_W       = (NAME_LEN_TILES * 8)
 CUP_PIX_W        = 16
 CUP_PIX_X_LEFT   = (NAME_PIX_X + ((NAME_PIX_W - CUP_PIX_W) / 2)) ; centralizado sob o texto
-CUP_PIX_Y        = (NAME_TILE_Y*8 + 8)  ; logo abaixo do nome (px)
+CUP_PIX_Y        = (NAME_TILE_Y*8 + 24) ; mais abaixo do nome (px)
 CUP_PIX_X_RIGHT  = (CUP_PIX_X_LEFT + 8) ; sprite direito
+CUP_PIX_Y_BOTTOM = (CUP_PIX_Y + 8)      ; segunda linha alinhada para sprite 16x16 nítido
+CUP_STEAM_X      = (CUP_PIX_X_LEFT + 5)
+CUP_STEAM_Y0     = (CUP_PIX_Y - 8)
+CUP_STEAM_Y1     = (CUP_PIX_Y - 10)
 OBJ_VRAM_WORD    = $0000                ; VRAM word addr ($0000 bytes)
 OBJ_OBSEL_BASE   = $00                  ; OBSEL base correspondente a $0000 bytes
 
@@ -98,18 +108,46 @@ Reset:
     dex
     bne @clr_vram
 
-; ----- Paleta BG (fundo verde, texto branco) -----
+; ----- Paleta BG colorida (céu e texto claro) -----
     sep #$20
     .a8
-    stz $2121            ; CGRAM addr = 0
-    lda #$E0
-    sta $2122            ; cor 0 (BG) = verde (E0 03)
-    lda #$03
+    stz $2121            ; palette 0, color 0
+    lda #$E0             ; cor 0 = ciano claro (backdrop)
     sta $2122
-    lda #$01
-    sta $2121            ; CGRAM addr = 1
-    lda #$FF
-    sta $2122            ; cor 1 (texto) = branco (FF 7F)
+    lda #$5F
+    sta $2122
+    lda #$FF             ; cor 1 = branco
+    sta $2122
+    lda #$7F
+    sta $2122
+    lda #$DA             ; cor 2 = verde água
+    sta $2122
+    lda #$56
+    sta $2122
+    lda #$84             ; cor 3 = azul mais escuro
+    sta $2122
+    lda #$31
+    sta $2122
+
+    lda #$04             ; palette 1 (sombra)
+    sta $2121
+    lda #$E0             ; cor 0 igual ao backdrop
+    sta $2122
+    lda #$5F
+    sta $2122
+    lda #$A2             ; cor 1 = sombra escura
+    sta $2122
+    lda #$14
+    sta $2122
+
+    lda #$08             ; palette 2 (texto principal)
+    sta $2121
+    lda #$E0             ; cor 0 igual ao backdrop
+    sta $2122
+    lda #$5F
+    sta $2122
+    lda #$FF             ; cor 1 = branco
+    sta $2122
     lda #$7F
     sta $2122
 
@@ -127,73 +165,62 @@ Reset:
     cpx #(CharacterDataEnd-CharacterData)
     bne @load_font
 
-; ----- Escreve "JULIO MIGUEL" em BG1 linha NAME_TILE_Y -----
-    lda #(BG1_MAP_WORD + NAME_TILE_Y*32 + NAME_TILE_X)
+; ----- Escreve texto "JULIO MIGUEL" -----
+    rep #$20
+    .a16
+    lda #NAME_BG_WORD
     sta $2116
-
     sep #$20
     .a8
-    ; (Escreve tile ID no low byte, atributos no high = 0)
-    ; J(10) U(21) L(12) I(9) O(15) ' ' (0) M(13) I(9) G(7) U(21) E(5) L(12)
-    lda #10
+    ldx #$0000
+@name_main:
+    lda NameTiles,x
     sta $2118
-    stz $2119
-    lda #21
-    sta $2118
-    stz $2119
-    lda #12
-    sta $2118
-    stz $2119
-    lda #9
-    sta $2118
-    stz $2119
-    lda #15
-    sta $2118
-    stz $2119
-    lda #0
-    sta $2118
-    stz $2119
-    lda #13
-    sta $2118
-    stz $2119
-    lda #9
-    sta $2118
-    stz $2119
-    lda #7
-    sta $2118
-    stz $2119
-    lda #21
-    sta $2118
-    stz $2119
-    lda #5
-    sta $2118
-    stz $2119
-    lda #12
-    sta $2118
-    stz $2119
+    lda #$08             ; palette 2
+    sta $2119
+    inx
+    cpx #NAME_LEN_TILES
+    bne @name_main
 
 ; ====== SPRITES (OBJ) ======
 ; OBJ são sempre 4bpp. Vamos:
-; - colocar tiles da xícara em VRAM OBJ base $0000 (tile 0 e 1)
-; - usar 2 sprites 8x8 lado a lado
+; - colocar tiles da xícara + vapor em VRAM OBJ base $0000 (tiles 0..5)
+; - usar 5 sprites 8x8 (4 da xícara + 1 vapor animado)
 ; - paleta OBJ #0 (CGRAM 0x80..0x8F)
 
 ; ----- OBSEL: base OBJ = $0000, tamanho (8x8,16x16) -----
     lda #OBJ_OBSEL_BASE
     sta $2101            ; $2101 OBSEL = base index 0, size sel 0 (small=8x8)
 
-; ----- Paleta OBJ #0 mínima (cor0=transp, cor1=branco) -----
+; ----- Paleta OBJ #0 (xícara marrom) -----
     lda #$80
     sta $2121            ; CGRAM addr = $80 (OBJ pal 0, color 0)
     stz $2122            ; cor0 = 0000 (transparente)
     stz $2122
+    lda #$98             ; cor1 = corpo da caneca (bege)
+    sta $2122
+    lda #$32
+    sta $2122
+    lda #$CA             ; cor2 = contorno escuro
+    sta $2122
+    lda #$08
+    sta $2122
+    lda #$7E             ; cor3 = brilho da borda
+    sta $2122
+    lda #$53
+    sta $2122
+
+    ; palette 1 para vapor branco
+    lda #$90
+    sta $2121            ; CGRAM addr = $90 (OBJ pal 1, color 0)
+    stz $2122
+    stz $2122
     lda #$FF
-    sta $2122            ; cor1 = FFFF? não — SNES usa 15-bit: FF 7F (=branco)
+    sta $2122
     lda #$7F
     sta $2122
-    ; (Opcional: escrever mais cores conforme sua arte usar)
 
-; ----- Carrega tiles OBJ (xícara) em VRAM OBJ base (2 tiles = 64 bytes) -----
+; ----- Carrega tiles OBJ (xícara + vapor + base estendida) -----
     rep #$20
     .a16
     lda #OBJ_VRAM_WORD
@@ -231,42 +258,132 @@ Reset:
     dex
     bne @clr_oam_hi
 
-; ----- Escreve 2 sprites (8x8 cada) para formar 16x8 -----
-; Formato OAM 4 bytes por sprite: [X low] [Y] [TILE] [ATRIB]
-; X high e tamanho ficam na high table; como X<256 e small, fica 0.
-
-    ; Sprite 0 (tile 0) — esquerda
-    stz $2102            ; volta OAM addr = 0 (sprite 0)
-    stz $2103
-    lda #CUP_PIX_X_LEFT  ; X low
-    sta $2104
-    lda #CUP_PIX_Y       ; Y
-    sta $2104
-    lda #$00             ; TILE = 0 (base OBJ $0000)
-    sta $2104
-    lda #$00             ; ATRIB: pal=0, prioridade=0, sem flip
-    sta $2104
-
-    ; Sprite 1 (tile 1) — direita
-    lda #CUP_PIX_X_RIGHT ; X low
-    sta $2104
-    lda #CUP_PIX_Y       ; Y
-    sta $2104
-    lda #$01             ; TILE = 1
-    sta $2104
-    lda #$00             ; ATRIB
-    sta $2104
+; ----- Estado inicial de fade e animação -----
+    stz FadeLevel
+    stz FadeCounter
+    stz SteamCounter
+    jsr WriteCupSprites
 
 ; ----- Liga BG1 e OBJ no main screen -----
     lda #%00010001
     sta $212C            ; $212C TM: bit0=BG1, bit4=OBJ
 
-; ----- Liga a tela -----
-    lda #$0F
-    sta $2100
+; ----- Liga a tela com brilho 0 (fade-in no loop) -----
+    stz $2100
 
 Forever:
+    jsr WaitFrameStart
+    jsr UpdateFade
+    jsr UpdateSteam
     jmp Forever
+
+; ------------------------------------------
+; Aguarda próximo VBlank (uma iteração por frame)
+; ------------------------------------------
+WaitFrameStart:
+@wait_visible:
+    lda $4212
+    bmi @wait_visible
+@wait_vblank:
+    lda $4212
+    bpl @wait_vblank
+    rts
+
+; ------------------------------------------
+; Fade-in de brilho global ($2100 0..F)
+; ------------------------------------------
+UpdateFade:
+    lda FadeLevel
+    cmp #$0F
+    bcs @fade_done
+    inc FadeCounter
+    lda FadeCounter
+    cmp #$03             ; sobe 1 nível a cada 3 frames
+    bcc @fade_done
+    stz FadeCounter
+    inc FadeLevel
+    lda FadeLevel
+    sta $2100
+@fade_done:
+    rts
+
+; ------------------------------------------
+; Alterna frame do vapor e reescreve os sprites
+; ------------------------------------------
+UpdateSteam:
+    inc SteamCounter
+    jsr WriteCupSprites
+    rts
+
+; ------------------------------------------
+; Escreve 5 sprites (xícara 16x16 + vapor)
+; ------------------------------------------
+WriteCupSprites:
+    stz $2102            ; OAM addr = 0
+    stz $2103
+
+    ; Sprite 0 (tile 0) — esquerda
+    lda #CUP_PIX_X_LEFT
+    sta $2104
+    lda #CUP_PIX_Y
+    sta $2104
+    lda #$00
+    sta $2104
+    lda #$00
+    sta $2104
+
+    ; Sprite 1 (tile 1) — direita (linha de cima)
+    lda #CUP_PIX_X_RIGHT
+    sta $2104
+    lda #CUP_PIX_Y
+    sta $2104
+    lda #$01
+    sta $2104
+    lda #$00
+    sta $2104
+
+    ; Sprite 2 (tile 4) — esquerda (base estendida)
+    lda #CUP_PIX_X_LEFT
+    sta $2104
+    lda #CUP_PIX_Y_BOTTOM
+    sta $2104
+    lda #$04
+    sta $2104
+    lda #$00
+    sta $2104
+
+    ; Sprite 3 (tile 5) — direita (base estendida)
+    lda #CUP_PIX_X_RIGHT
+    sta $2104
+    lda #CUP_PIX_Y_BOTTOM
+    sta $2104
+    lda #$05
+    sta $2104
+    lda #$00
+    sta $2104
+
+    ; Sprite 4 (tile 2/3) — vapor animado (palette 1)
+    lda #CUP_STEAM_X
+    sta $2104
+    lda SteamCounter
+    and #$08
+    beq @steam_frame0
+@steam_frame1:
+    lda #CUP_STEAM_Y1
+    sta $2104
+    lda #$03
+    sta $2104
+    lda #$02
+    sta $2104
+    rts
+@steam_frame0:
+    lda #CUP_STEAM_Y0
+    sta $2104
+    lda #$02
+    sta $2104
+    lda #$02
+    sta $2104
+    rts
 
 ; ==========================================
 ; DADOS
@@ -276,7 +393,44 @@ CharacterData:
     .incbin "../assets/font.bin"
 CharacterDataEnd:
 
+NameTiles:
+    .byte 10,21,12,9,15,0,13,9,7,21,5,12
+
     .align 2
 CupTiles:
-    .incbin "../assets/cup_16x8_4bpp.bin"  ; 64 bytes = 2 tiles 8x8 4bpp
+    ; tile 0: xícara topo-esquerda (contorno + preenchimento)
+    .byte $00,$3F,$1F,$7F,$1F,$60,$1F,$60
+    .byte $1F,$60,$1F,$60,$1F,$60,$1F,$60
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+
+    ; tile 1: xícara topo-direita (com alça)
+    .byte $00,$F0,$E0,$F8,$E0,$18,$E0,$1E
+    .byte $E0,$1B,$E0,$1B,$E0,$1B,$E0,$1E
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+
+    ; tile 2: vapor frame A (8x8, 4bpp, usa cor 1)
+    .byte $18,$00,$24,$00,$18,$00,$08,$00
+    .byte $10,$00,$20,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+
+    ; tile 3: vapor frame B (8x8, 4bpp, usa cor 1)
+    .byte $30,$00,$48,$00,$30,$00,$10,$00
+    .byte $08,$00,$04,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+
+    ; tile 4: xícara base-esquerda (corpo + pé)
+    .byte $1F,$60,$1F,$60,$1F,$60,$0F,$30
+    .byte $00,$3F,$00,$1F,$00,$0F,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+
+    ; tile 5: xícara base-direita
+    .byte $E0,$18,$E0,$18,$E0,$18,$E0,$18
+    .byte $00,$F0,$00,$E0,$00,$C0,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
 CupTilesEnd:
