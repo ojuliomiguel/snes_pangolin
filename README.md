@@ -1,4 +1,6 @@
-# SNES ca65 template
+# Pangolin SNES
+
+![Hello Julio](assets/hello_julio.gif)
 
 ## Quick workflow
 
