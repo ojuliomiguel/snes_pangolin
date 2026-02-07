@@ -1,0 +1,15 @@
+# Build output
+build/
+*.o
+*.sfc
+
+# Temporary / backup files
+*~
+*.bak
+
+# OS/editor outputs
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
