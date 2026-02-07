@@ -40,6 +40,7 @@ SCREEN_TILE_W    = 32
 NAME_LEN_TILES   = 12
 NAME_TILE_X      = ((SCREEN_TILE_W - NAME_LEN_TILES) / 2) ; coluna em tiles (BG1)
 NAME_TILE_Y      = 10          ; linha  em tiles (BG1)
+BG1_MAP_WORD     = $0400       ; VRAM word addr ($0800 bytes): tilemap BG1 fora da área OBJ
 
 NAME_PIX_X       = (NAME_TILE_X * 8)
 NAME_PIX_W       = (NAME_LEN_TILES * 8)
@@ -47,6 +48,8 @@ CUP_PIX_W        = 16
 CUP_PIX_X_LEFT   = (NAME_PIX_X + ((NAME_PIX_W - CUP_PIX_W) / 2)) ; centralizado sob o texto
 CUP_PIX_Y        = (NAME_TILE_Y*8 + 8)  ; logo abaixo do nome (px)
 CUP_PIX_X_RIGHT  = (CUP_PIX_X_LEFT + 8) ; sprite direito
+OBJ_VRAM_WORD    = $0000                ; VRAM word addr ($0000 bytes)
+OBJ_OBSEL_BASE   = $00                  ; OBSEL base correspondente a $0000 bytes
 
 ; ------------------------------------------
 ; RESET
@@ -70,9 +73,10 @@ Reset:
     lda #$8F             ; $2100 INIDISP = screen off, brilho máx
     sta $2100
 
-; ----- Mode 0 / BG1 tilemap em $0000, tiles em $1000 -----
+; ----- Mode 0 / BG1 tilemap em $0800, tiles em $1000 -----
     stz $2105            ; $2105 BGMODE = Mode 0
-    stz $2107            ; $2107 BG1SC = tilemap @ VRAM $0000 (32x32)
+    lda #$04
+    sta $2107            ; $2107 BG1SC = tilemap @ VRAM $0800 (32x32)
     rep #$20
     .a16
     lda #$1000
@@ -124,7 +128,7 @@ Reset:
     bne @load_font
 
 ; ----- Escreve "JULIO MIGUEL" em BG1 linha NAME_TILE_Y -----
-    lda #(NAME_TILE_Y*32 + NAME_TILE_X)
+    lda #(BG1_MAP_WORD + NAME_TILE_Y*32 + NAME_TILE_X)
     sta $2116
 
     sep #$20
@@ -175,7 +179,7 @@ Reset:
 ; - paleta OBJ #0 (CGRAM 0x80..0x8F)
 
 ; ----- OBSEL: base OBJ = $0000, tamanho (8x8,16x16) -----
-    lda #$00
+    lda #OBJ_OBSEL_BASE
     sta $2101            ; $2101 OBSEL = base index 0, size sel 0 (small=8x8)
 
 ; ----- Paleta OBJ #0 mínima (cor0=transp, cor1=branco) -----
@@ -189,10 +193,11 @@ Reset:
     sta $2122
     ; (Opcional: escrever mais cores conforme sua arte usar)
 
-; ----- Carrega tiles OBJ (xícara) em VRAM $0000 (2 tiles = 64 bytes) -----
+; ----- Carrega tiles OBJ (xícara) em VRAM OBJ base (2 tiles = 64 bytes) -----
     rep #$20
     .a16
-    stz $2116            ; VRAM word = $0000
+    lda #OBJ_VRAM_WORD
+    sta $2116            ; VRAM word = base OBJ
     ldx #$0000
 @load_cup:
     lda CupTiles,x
@@ -217,8 +222,9 @@ Reset:
     dex
     bne @hide_oam
 
-    lda #$00
-    sta $2103            ; agora high table @ $0200
+    stz $2102            ; OAM word addr low = $00
+    lda #$01
+    sta $2103            ; OAM word addr high bit = 1 -> byte $0200 (high table)
     ldx #$0020
 @clr_oam_hi:
     stz $2104            ; limpa 32 bytes (X MSB/size)
