@@ -4,13 +4,17 @@
   <img src="snes_hello_world.jpeg" alt="SNES running the first Hello World ROM" width="520">
 </p>
 
-My first "Olar Mundo", my first Hello World, running on a real Super Nintendo.
+My first Hello World running on a real Super Nintendo.
 
 This repository builds a tiny LoROM program in 65816 assembly. The ROM was built
 locally, copied to an EverDrive, and booted on original SNES hardware.
 
 The current scene renders centered `JULIO MIGUEL` text, a colored background, a
 sprite-based coffee cup, animated steam, and a simple fade-in.
+
+<p align="center">
+  <img src="assets/hello_julio.gif" alt="Hello World ROM output" width="420">
+</p>
 
 ## Why This Matters
 
