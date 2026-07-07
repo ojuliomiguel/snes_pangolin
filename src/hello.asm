@@ -16,7 +16,7 @@
     .byte $01                      ; NTSC
     .byte $00                      ; developer (legacy)
     .byte $00                      ; version
-    .word $0000                    ; checksum complement
+    .word $FFFF                    ; checksum complement (par deve somar $FFFF)
     .word $0000                    ; checksum
 
 ; ==========================================
@@ -82,6 +82,61 @@ Reset:
     .a8
     lda #$8F             ; $2100 INIDISP = screen off, brilho máx
     sta $2100
+
+; ----- Init completo de registradores -----
+; Emulador zera tudo no boot; hardware real liga com LIXO nos registradores.
+; Sem isso, color math ($2130), janelas ($2123+) ou scroll ($210D+) podem
+; deixar a tela preta só no console.
+    stz $4200            ; NMI/IRQ/auto-joypad off
+    lda #$FF
+    sta $4201            ; WRIO
+    stz $420B            ; DMA off
+    stz $420C            ; HDMA off
+    stz $420D            ; SlowROM
+
+    stz $2101            ; OBSEL
+    stz $2102            ; OAM addr
+    stz $2103
+    stz $2106            ; mosaic off
+    stz $2108            ; BG2SC
+    stz $2109            ; BG3SC
+    stz $210A            ; BG4SC
+    stz $210C            ; BG34NBA
+    stz $210D            ; BG1HOFS = 0 (registrador de escrita dupla)
+    stz $210D
+    stz $210E            ; BG1VOFS = 0
+    stz $210E
+    stz $210F            ; BG2HOFS
+    stz $210F
+    stz $2110            ; BG2VOFS
+    stz $2110
+    stz $2111            ; BG3HOFS
+    stz $2111
+    stz $2112            ; BG3VOFS
+    stz $2112
+    stz $2113            ; BG4HOFS
+    stz $2113
+    stz $2114            ; BG4VOFS
+    stz $2114
+    stz $211A            ; Mode 7 settings
+    stz $2123            ; janelas off (BG1/BG2)
+    stz $2124            ; janelas off (BG3/BG4)
+    stz $2125            ; janelas off (OBJ/color)
+    stz $2126            ; window 1 left
+    stz $2127            ; window 1 right
+    stz $2128            ; window 2 left
+    stz $2129            ; window 2 right
+    stz $212A            ; window mask logic BG
+    stz $212B            ; window mask logic OBJ/color
+    stz $212D            ; TS: subscreen vazio
+    stz $212E            ; TMW: sem mask no main screen
+    stz $212F            ; TSW: sem mask no subscreen
+    lda #$30
+    sta $2130            ; CGWSEL: color math off, sem clip-to-black
+    stz $2131            ; CGADSUB: sem add/sub
+    lda #$E0
+    sta $2132            ; cor fixa = preto
+    stz $2133            ; SETINI: sem interlace/overscan
 
 ; ----- Mode 0 / BG1 tilemap em $0800, tiles em $1000 -----
     stz $2105            ; $2105 BGMODE = Mode 0
